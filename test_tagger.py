@@ -36,18 +36,15 @@ model.to(device)
 print(f"✅ Model loaded on {device}")
 
 # === Load id2label.json safely ===
-print("🌐 Fetching id2label.json...")
+print("📄 Loading local id2label.json...")
 id2label = {}
 try:
-    response = requests.get(
-        "https://huggingface.co/SmilingWolf/wd14-vit-v3/resolve/main/id2label.json",
-        headers={"User-Agent": "Mozilla/5.0"}
-    )
-    response.raise_for_status()
-    id2label_raw = response.json()
-    id2label = {int(k): v for k, v in id2label_raw.items()}
+    with open("id2label.json", "r") as f:
+        id2label_raw = json.load(f)
+        id2label = {int(k): v for k, v in id2label_raw.items()}
 except Exception as e:
-    print(f"⚠️ Failed to fetch id2label.json: {e}")
+    print(f"⚠️ Failed to load local id2label.json: {e}")
+
 
 # === Preprocessing for 448x448 ===
 transform = transforms.Compose([
