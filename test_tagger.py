@@ -9,6 +9,7 @@ from torchvision import transforms
 from appwrite.client import Client
 from appwrite.services.storage import Storage
 from appwrite.services.databases import Databases
+from appwrite.query import Query
 
 # === Load .env ===
 load_dotenv()
@@ -68,7 +69,8 @@ if os.path.exists(TAG_PATH):
 else:
     tagged = []
 
-tagged_ids = {entry["imageId"] for entry in tagged}
+# Convert to dict for fast replace
+tagged_by_id = {entry["imageId"]: entry for entry in tagged}
 
 # === Fetch images ===
 print("📦 Fetching image list from Appwrite...")
@@ -80,11 +82,7 @@ for file in file_list["files"]:
     file_id = file["$id"]
     file_name = file["name"]
 
-    if file_id in tagged_ids:
-        print(f"⏩ Skipping {file_name} (already tagged)")
-        continue
-
-    print(f"🔍 Tagging {file_name}...")
+    print(f"🔍 Tagging {file_name} (imageId: {file_id})...")
 
     try:
         image_bytes = storage.get_file_download(BUCKET_ID, file_id)
@@ -108,7 +106,6 @@ for file in file_list["files"]:
         ]
         tags = sorted(tags, key=lambda x: -x[1])[:MAX_TAGS]
 
-        # Display tags
         print("📝 Tags:")
         for tag, score in tags:
             print(f" - {tag}: {score}")
@@ -120,24 +117,42 @@ for file in file_list["files"]:
             "tags": [tag for tag, _ in tags]
         }
 
-        tagged.append(tag_data)
-
+        # Replace entry in local tag list
+        tagged_by_id[file_id] = tag_data
         with open(TAG_PATH, "w") as f:
-            json.dump(tagged, f, indent=2)
+            json.dump(list(tagged_by_id.values()), f, indent=2)
 
         print("✅ Tags saved locally.")
 
-        # === Upload to Appwrite DB ===
+        # === Upload or update in Appwrite DB ===
         try:
-            databases.create_document(
+            existing_docs = databases.list_documents(
                 database_id=DATABASE_ID,
                 collection_id=COLLECTION_ID,
-                document_id="unique()",
-                data=tag_data
+                queries=[Query.equal("imageId", file_id)]
+
             )
-            print("📤 Uploaded tags to Appwrite database.\n")
+
+            if existing_docs["total"] > 0:
+                doc_id = existing_docs["documents"][0]["$id"]
+                databases.update_document(
+                    database_id=DATABASE_ID,
+                    collection_id=COLLECTION_ID,
+                    document_id=doc_id,
+                    data=tag_data
+                )
+                print("🔁 Updated existing document in Appwrite database.\n")
+            else:
+                databases.create_document(
+                    database_id=DATABASE_ID,
+                    collection_id=COLLECTION_ID,
+                    document_id="unique()",
+                    data=tag_data
+                )
+                print("📤 Created new document in Appwrite database.\n")
+
         except Exception as e:
-            print(f"⚠️ Failed to upload tags to Appwrite: {e}\n")
+            print(f"⚠️ Failed to sync with Appwrite database: {e}\n")
 
     except Exception as e:
         print(f"❌ Error processing {file_name}: {e}")
