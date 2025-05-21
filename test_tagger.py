@@ -2,13 +2,13 @@ import os
 import json
 import torch
 import timm
-import requests
 from PIL import Image
 from io import BytesIO
 from dotenv import load_dotenv
 from torchvision import transforms
 from appwrite.client import Client
 from appwrite.services.storage import Storage
+from appwrite.services.databases import Databases
 
 # === Load .env ===
 load_dotenv()
@@ -18,18 +18,22 @@ APPWRITE_API_KEY = os.getenv("APPWRITE_API_KEY")
 APPWRITE_ENDPOINT = "https://syd.cloud.appwrite.io/v1"
 APPWRITE_PROJECT_ID = "682b826b003d9cba9018"
 BUCKET_ID = "682cfa1a0016991596f5"
+DATABASE_ID = "682b89cc0016319fcf30"
+COLLECTION_ID = "682d7b240022ba63cd02"
 TAG_PATH = "tagged_images.json"
 
 # === Configurable Threshold and Tag Limit ===
-TAG_THRESHOLD = 0.35   # confidence score threshold
-MAX_TAGS = 20       # limit saved tags per image
+TAG_THRESHOLD = 0.35
+MAX_TAGS = 20
 
 # === Initialize Appwrite ===
 client = Client()
 client.set_endpoint(APPWRITE_ENDPOINT)
 client.set_project(APPWRITE_PROJECT_ID)
 client.set_key(APPWRITE_API_KEY)
+
 storage = Storage(client)
+databases = Databases(client)
 
 # === Load model ===
 print("🔄 Loading wd-eva02 model from timm...")
@@ -106,16 +110,30 @@ for file in file_list["files"]:
         for tag, score in tags[:20]:
             print(f" - {tag}: {score}")
 
-        tagged.append({
+        tag_data = {
             "imageId": file_id,
             "fileName": file_name,
             "tags": [tag for tag, _ in tags[:MAX_TAGS]]
-        })
+        }
+
+        tagged.append(tag_data)
 
         with open(TAG_PATH, "w") as f:
             json.dump(tagged, f, indent=2)
 
-        print("✅ Tags saved.\n")
+        print("✅ Tags saved locally.")
+
+        # === Upload to Appwrite DB ===
+        try:
+            databases.create_document(
+                database_id=DATABASE_ID,
+                collection_id=COLLECTION_ID,
+                document_id="unique()",
+                data=tag_data
+            )
+            print("📤 Uploaded tags to Appwrite database.\n")
+        except Exception as e:
+            print(f"⚠️ Failed to upload tags to Appwrite: {e}\n")
 
     except Exception as e:
         print(f"❌ Error processing {file_name}: {e}")
