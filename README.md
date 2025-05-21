@@ -1,18 +1,19 @@
 # wdtagger
 
-`wdtagger` is a local image tagging tool that uses `onnxruntime` and HuggingFace-hosted ONNX models (e.g. `wd-eva02-large-tagger-v3`, `wd-vit-tagger-v3`) to generate Danbooru-style tags for images stored in an Appwrite bucket. It downloads the model and tag CSV on first run, performs OpenCV-based preprocessing to ensure correct input shape, and applies a configurable confidence threshold.
+`wdtagger` is a local image tagging tool that uses `onnxruntime` and HuggingFace-hosted ONNX models (e.g. `wd-vit-tagger-v3`) to generate Danbooru-style tags for images stored in a BlobPics (Cloudflare Worker + R2) bucket.
+It downloads the model and tag CSV on first run, performs OpenCV-based preprocessing, and applies a configurable confidence threshold.
 
-Each tagged image is stored in a local cache (`tagged_images.json`) and uploaded to your Appwrite database collection.
+Each tagged image is saved as a local `.json` file and automatically uploaded to your BlobPics backend via a `POST /upload-json` API.
 
 ---
 
 ## 📦 Requirements
 
-- Python 3.11+
-- `uv` package manager (or pip)
-- Appwrite project + API key with access to your image bucket
-- Internet access (for HuggingFace model download)
-- CUDA-compatible GPU (optional)
+* Python 3.11+
+* `uv` package manager (or pip)
+* Access to a BlobPics site (Cloudflare Worker + R2, with `/list`, `/original/`, `/upload-json`)
+* Internet access (for HuggingFace model download)
+* CUDA-compatible GPU (optional)
 
 ---
 
@@ -26,17 +27,17 @@ source .venv/bin/activate
 uv pip install -r requirements.txt
 ```
 
-Create your `.env` file:
+Set your **BlobPics domain** in the script (`test_tagger.py`):
 
-```env
-APPWRITE_API_KEY=your_appwrite_api_key
+```python
+DOMAIN = "blobpics.tech"
 ```
 
 ---
 
-## 🚀 One-time Tagging
+## 🚀 Run Tagger
 
-Run the script to tag all untagged images in the Appwrite bucket:
+Run the script to fetch all images, tag them, and upload tag data to your site:
 
 ```bash
 python test_tagger.py
@@ -44,14 +45,16 @@ python test_tagger.py
 
 This will:
 
-- Save tags to `tagged_images.json`
-- Upload results to your Appwrite database collection (`imageTags`)
+* Get image IDs from your BlobPics `/list` endpoint
+* Download each image and generate tags
+* Save `.json` files locally (one per image)
+* POST tags to your BlobPics `/upload-json` API
 
 ---
 
 ## 🔁 Persistent Tagging Loop
 
-To continuously tag every 60 minutes:
+To continuously tag new images every 60 minutes:
 
 ```bash
 ./persistent_runner.sh
@@ -81,25 +84,25 @@ python test_tagger.py
 Edit the top of `test_tagger.py`:
 
 ```python
-REPO = "SmilingWolf/wd-vit-tagger-v3"  # HuggingFace model
-TAG_THRESHOLD = 0.5                    # Minimum confidence to keep tag
-TAG_BLACKLIST = ["blue_skin"]         # Tags to ignore completely
+DOMAIN = "blobpics.tech"                # Your BlobPics site
+TAG_THRESHOLD = 0.5                     # Minimum confidence to keep tag
+TAG_BLACKLIST = ["blue_skin"]           # Tags to ignore completely
 ```
 
 ---
 
 ## 📁 Files
 
-| File                  | Purpose                                           |
-|-----------------------|---------------------------------------------------|
-| `test_tagger.py`      | Tags images from Appwrite bucket & uploads to DB |
-| `persistent_runner.sh`| Optional: loops tagging every hour               |
-| `requirements.txt`    | Dependencies for the project                      |
-| `tagged_images.json`  | Output tag cache (local copy)                     |
-| `.env`                | Contains your Appwrite API key                    |
+| File                   | Purpose                                          |
+| ---------------------- | ------------------------------------------------ |
+| `test_tagger.py`       | Tags images from BlobPics & uploads tags via API |
+| `persistent_runner.sh` | Optional: loops tagging every hour               |
+| `requirements.txt`     | Dependencies for the project                     |
+| `tagged_images.json`   | Output tag cache (local copy)                    |
 
 ---
 
 ## 📄 License
 
 MIT — use freely with credit.
+```
