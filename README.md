@@ -2,6 +2,8 @@
 
 `wdtagger` is a local image tagging tool using `timm` and the `wd-eva02-large-tagger-v3` model to generate Danbooru-style tags for images stored in an Appwrite bucket. It supports offline tag label mapping and can run persistently on a loop.
 
+Each tagged image is stored in a local cache and also uploaded to your Appwrite database collection.
+
 ---
 
 ## 📦 Requirements
@@ -42,7 +44,9 @@ Run the script to tag all untagged images in the Appwrite bucket:
 python test_tagger.py
 ```
 
-This will append results to `tagged_images.json`.
+This will:
+- Append results to `tagged_images.json`
+- Upload tags to your Appwrite database collection (`imageTags`)
 
 ---
 
@@ -78,20 +82,8 @@ python test_tagger.py
 Edit the top of `test_tagger.py`:
 
 ```python
-TAG_THRESHOLD = 0.5  # Minimum confidence score to include a tag
-MAX_TAGS = 100       # Max tags saved per image
-```
-
----
-
-## 🌐 Sync Output to Server (Optional)
-
-Append this to `persistent_runner.sh` to upload results:
-
-```bash
-curl -X POST https://yourdomain.com/api/upload-tags \
-     -H "Content-Type: application/json" \
-     --data-binary "@tagged_images.json"
+TAG_THRESHOLD = 0.35  # Minimum confidence score to include a tag
+MAX_TAGS = 20         # Max tags saved per image
 ```
 
 ---
@@ -100,10 +92,10 @@ curl -X POST https://yourdomain.com/api/upload-tags \
 
 | File                  | Purpose                                  |
 |-----------------------|------------------------------------------|
-| `test_tagger.py`      | Tags images from Appwrite bucket         |
+| `test_tagger.py`      | Tags images from Appwrite bucket & uploads to DB |
 | `persistent_runner.sh`| Loops tagging every hour                 |
 | `requirements.txt`    | Dependencies for the project             |
-| `tagged_images.json`  | Output tag cache                         |
+| `tagged_images.json`  | Output tag cache (local copy)            |
 | `id2label.json`       | Label mapping for model outputs          |
 | `.env`                | Contains your Appwrite API key           |
 
