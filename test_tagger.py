@@ -87,6 +87,20 @@ print("📦 Fetching images...")
 file_list = storage.list_files(BUCKET_ID)
 print(f"📁 Found {len(file_list['files'])} files.")
 
+# === Check for orphaned documents and delete them ===
+print("🧹 Checking for orphaned documents in collection...")
+try:
+    all_docs = databases.list_documents(DATABASE_ID, COLLECTION_ID, [Query.limit(100)])  # Adjust pagination if >100 docs
+    file_ids = set(f["$id"] for f in file_list["files"])
+    for doc in all_docs["documents"]:
+        image_id = doc.get("imageId")
+        if image_id and image_id not in file_ids:
+            print(f"🗑️ Deleting orphaned entry: {doc['$id']} (imageId: {image_id})")
+            databases.delete_document(DATABASE_ID, COLLECTION_ID, doc["$id"])
+except Exception as e:
+    print(f"⚠️ Failed to clean orphaned documents: {e}")
+    traceback.print_exc()
+
 # === Tag each image ===
 for file in file_list["files"]:
     file_id = file["$id"]
