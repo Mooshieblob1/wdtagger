@@ -21,9 +21,10 @@ BUCKET_ID = "682cfa1a0016991596f5"
 DATABASE_ID = "682b89cc0016319fcf30"
 COLLECTION_ID = "682d7b240022ba63cd02"
 TAG_PATH = "tagged_images.json"
+TAG_BLACKLIST = ["blue_skin"]
 
 # === Configurable Threshold and Tag Limit ===
-TAG_THRESHOLD = 0.35
+TAG_THRESHOLD = 0.5
 MAX_TAGS = 20
 
 # === Initialize Appwrite ===
@@ -91,29 +92,32 @@ for file in file_list["files"]:
 
         image_tensor = transform(image).unsqueeze(0).to(device)
 
-        with torch.no_grad():
-            logits = model(image_tensor)
-            probs = torch.sigmoid(logits)[0]
-
         if not id2label:
             print("⚠️ Skipping tagging because id2label is unavailable.")
             continue
 
+        with torch.no_grad():
+            logits = model(image_tensor)
+            probs = torch.sigmoid(logits)[0]
+
+        # Filter and sort tags
         tags = [
             (id2label[i], round(probs[i].item(), 4))
             for i in range(len(probs))
-            if probs[i].item() > TAG_THRESHOLD
+            if probs[i].item() > TAG_THRESHOLD and id2label[i] not in TAG_BLACKLIST
         ]
-        tags.sort(key=lambda x: -x[1])
+        tags = sorted(tags, key=lambda x: -x[1])[:MAX_TAGS]
 
+        # Display tags
         print("📝 Tags:")
-        for tag, score in tags[:20]:
+        for tag, score in tags:
             print(f" - {tag}: {score}")
 
+        # Prepare tag data
         tag_data = {
             "imageId": file_id,
             "fileName": file_name,
-            "tags": [tag for tag, _ in tags[:MAX_TAGS]]
+            "tags": [tag for tag, _ in tags]
         }
 
         tagged.append(tag_data)
