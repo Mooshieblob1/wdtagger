@@ -1,0 +1,8 @@
+torch==2.2.2
+timm
+transformers==4.39.3
+pillow
+python-dotenv
+requests
+appwrite
+torchvision
