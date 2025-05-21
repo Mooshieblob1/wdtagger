@@ -20,6 +20,10 @@ APPWRITE_PROJECT_ID = "682b826b003d9cba9018"
 BUCKET_ID = "682cfa1a0016991596f5"
 TAG_PATH = "tagged_images.json"
 
+# === Configurable Threshold and Tag Limit ===
+TAG_THRESHOLD = 0.35   # confidence score threshold
+MAX_TAGS = 20       # limit saved tags per image
+
 # === Initialize Appwrite ===
 client = Client()
 client.set_endpoint(APPWRITE_ENDPOINT)
@@ -35,7 +39,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 print(f"✅ Model loaded on {device}")
 
-# === Load id2label.json safely ===
+# === Load id2label.json (offline) ===
 print("📄 Loading local id2label.json...")
 id2label = {}
 try:
@@ -44,7 +48,6 @@ try:
         id2label = {int(k): v for k, v in id2label_raw.items()}
 except Exception as e:
     print(f"⚠️ Failed to load local id2label.json: {e}")
-
 
 # === Preprocessing for 448x448 ===
 transform = transforms.Compose([
@@ -62,7 +65,7 @@ else:
 
 tagged_ids = {entry["imageId"] for entry in tagged}
 
-# === Fetch image list ===
+# === Fetch images ===
 print("📦 Fetching image list from Appwrite...")
 file_list = storage.list_files(BUCKET_ID)
 print(f"Found {len(file_list['files'])} files.")
@@ -95,7 +98,7 @@ for file in file_list["files"]:
         tags = [
             (id2label[i], round(probs[i].item(), 4))
             for i in range(len(probs))
-            if probs[i].item() > 0.5
+            if probs[i].item() > TAG_THRESHOLD
         ]
         tags.sort(key=lambda x: -x[1])
 
@@ -106,7 +109,7 @@ for file in file_list["files"]:
         tagged.append({
             "imageId": file_id,
             "fileName": file_name,
-            "tags": [tag for tag, _ in tags]
+            "tags": [tag for tag, _ in tags[:MAX_TAGS]]
         })
 
         with open(TAG_PATH, "w") as f:
